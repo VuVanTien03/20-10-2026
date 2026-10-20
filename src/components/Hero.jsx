@@ -26,17 +26,25 @@ export default function Hero({ started }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    const mm = (e) => setTilt({ x: (e.clientX / window.innerWidth - 0.5) * 20, y: (e.clientY / window.innerHeight - 0.5) * 20 });
-    const go = (e) => {
-      if (e.gamma == null) return;
-      setTilt({ x: Math.max(-20, Math.min(20, e.gamma / 2)), y: Math.max(-20, Math.min(20, (e.beta - 45) / 3)) });
+    // Chỉ kích hoạt hiệu ứng nghiêng theo chuột trên thiết bị có chuột (Desktop), tránh làm giật lag điện thoại
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    let ticking = false;
+    const mm = (e) => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          setTilt({
+            x: (e.clientX / window.innerWidth - 0.5) * 16,
+            y: (e.clientY / window.innerHeight - 0.5) * 16,
+          });
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
-    window.addEventListener('pointermove', mm);
-    window.addEventListener('deviceorientation', go);
-    return () => {
-      window.removeEventListener('pointermove', mm);
-      window.removeEventListener('deviceorientation', go);
-    };
+
+    window.addEventListener('pointermove', mm, { passive: true });
+    return () => window.removeEventListener('pointermove', mm);
   }, []);
 
   return (

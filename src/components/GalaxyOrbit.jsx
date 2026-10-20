@@ -1,58 +1,88 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function GalaxyOrbit({ photos, onOpenHeart }) {
-  const [rotation, setRotation] = useState(0);
   const [activePhoto, setActivePhoto] = useState(null);
   const [windowSize, setWindowSize] = useState(() => ({
     w: typeof window !== 'undefined' ? window.innerWidth : 1200,
     h: typeof window !== 'undefined' ? window.innerHeight : 800,
   }));
 
+  const cardRefs = useRef([]);
+  const rotationRef = useRef(0);
   const isDraggingRef = useRef(false);
   const lastXRef = useRef(0);
   const lastTimeRef = useRef(0);
   const velocityRef = useRef(0);
   const dragDistRef = useRef(0);
 
+  // Cập nhật vị trí thẻ ảnh trực tiếp lên DOM (Zero React re-render lag)
+  const updateCards = useCallback((rot) => {
+    const total = photos.length;
+    if (total === 0) return;
+    const w = window.innerWidth;
+    const isMob = w < 600;
+    const rX = isMob ? Math.min(w * 0.44, 195) : Math.min(w * 0.42, 480);
+    const rY = rX * (isMob ? 0.36 : 0.28);
+
+    for (let index = 0; index < total; index++) {
+      const el = cardRefs.current[index];
+      if (!el) continue;
+      const angle = ((index / total) * 360 + rot) * (Math.PI / 180);
+      const x = Math.sin(angle) * rX;
+      const depth = Math.cos(angle);
+      const y = -depth * rY;
+      const normDepth = (depth + 1) * 0.5;
+      const scale = isMob ? 0.72 + normDepth * 0.38 : 0.72 + normDepth * 0.44;
+      const opacity = 0.52 + normDepth * 0.48;
+      const zIndex = depth > 0 ? Math.round(50 + depth * 50) : Math.round(10 + normDepth * 20);
+
+      el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${scale.toFixed(3)})`;
+      el.style.opacity = opacity.toFixed(2);
+      el.style.zIndex = zIndex;
+    }
+  }, [photos]);
+
   // Cập nhật kích thước màn hình responsive
   useEffect(() => {
     const handleResize = () => {
       setWindowSize({ w: window.innerWidth, h: window.innerHeight });
+      updateCards(rotationRef.current);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [updateCards]);
 
-  // Vòng lặp quán tính và tự xoay vũ trụ mượt mà 60 FPS
+  // Vòng lặp quán tính và tự xoay vũ trụ mượt mà 60 FPS (Zero State updates)
   useEffect(() => {
     let raf;
-    let lastFrame = performance.now();
 
-    const loop = (now) => {
+    // Khởi tạo vị trí ban đầu
+    updateCards(rotationRef.current);
+
+    const loop = () => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(32, now - lastFrame);
-      lastFrame = now;
 
       if (!isDraggingRef.current) {
         if (Math.abs(velocityRef.current) > 0.04) {
           // Trượt theo quán tính của tay
-          setRotation((prev) => prev + velocityRef.current);
+          rotationRef.current += velocityRef.current;
           velocityRef.current *= 0.94;
+          updateCards(rotationRef.current);
         } else {
           // Tự quay êm dịu như dải ngân hà
-          setRotation((prev) => prev + 0.14);
+          rotationRef.current += 0.14;
+          updateCards(rotationRef.current);
         }
       }
     };
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [updateCards]);
 
-  // Xử lý chạm vuốt bằng tay (chuột hoặc cảm ứng điện thoại) chuẩn xác, không chặn click
+  // Xử lý chạm vuốt bằng tay (chuột hoặc cảm ứng điện thoại) chuẩn xác
   const handlePointerDown = (e) => {
-    // Không bắt đầu drag nếu click thẳng vào nút mở quà
     if (e.target.closest('.galaxy-center-heart')) return;
 
     isDraggingRef.current = true;
@@ -69,7 +99,8 @@ export default function GalaxyOrbit({ photos, onOpenHeart }) {
       dragDistRef.current += Math.abs(dx);
 
       const sensitivity = window.innerWidth < 600 ? 0.38 : 0.28;
-      setRotation((prev) => prev + dx * sensitivity);
+      rotationRef.current += dx * sensitivity;
+      updateCards(rotationRef.current);
 
       velocityRef.current = (dx / dt) * 14;
       lastXRef.current = moveEvt.clientX;
@@ -88,11 +119,9 @@ export default function GalaxyOrbit({ photos, onOpenHeart }) {
     window.addEventListener('pointercancel', onUp);
   };
 
-  // Tính toán quỹ đạo 3D ngân hà mở rộng, cân đối
   const isMobile = windowSize.w < 600;
   const radiusX = isMobile ? Math.min(windowSize.w * 0.44, 195) : Math.min(windowSize.w * 0.42, 480);
   const radiusY = radiusX * (isMobile ? 0.36 : 0.28);
-  const total = photos.length;
 
   return (
     <div
@@ -139,7 +168,7 @@ export default function GalaxyOrbit({ photos, onOpenHeart }) {
                 <stop offset="100%" stopColor="#c724e0" />
               </linearGradient>
               <filter id="heart-glow-blur" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
                   <feMergeNode in="SourceGraphic" />
@@ -158,46 +187,27 @@ export default function GalaxyOrbit({ photos, onOpenHeart }) {
 
       {/* Các thẻ ảnh xoay quanh như tinh hà trong không gian 3D */}
       <div className="galaxy-cards-orbit">
-        {photos.map((item, index) => {
-          // Tính góc và tọa độ elip 3D
-          const angle = ((index / total) * 360 + rotation) * (Math.PI / 180);
-          const x = Math.sin(angle) * radiusX;
-          const depth = Math.cos(angle); // -1 (xa phía sau) đến +1 (sát phía trước)
-          const y = -depth * radiusY;
-
-          // Hiệu ứng phối cảnh chiều sâu chân thực
-          const normDepth = (depth + 1) / 2; // 0 đến 1
-          const scale = isMobile ? 0.72 + normDepth * 0.38 : 0.72 + normDepth * 0.44;
-          const opacity = 0.52 + normDepth * 0.48;
-          // Z-index: Phía trước (depth > 0) đè lên trái tim (zIndex > 40), phía sau chui ra sau trái tim (zIndex < 40)
-          const zIndex = depth > 0 ? Math.round(50 + depth * 50) : Math.round(10 + normDepth * 20);
-
-          return (
-            <div
-              key={index}
-              className="galaxy-card"
-              style={{
-                transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`,
-                opacity,
-                zIndex,
-              }}
-              onClick={(e) => {
-                if (dragDistRef.current < 6) {
-                  e.stopPropagation();
-                  setActivePhoto(item);
-                }
-              }}
-            >
-              <div className="card-frame">
-                <div className="card-img-wrap">
-                  <img src={item.src} alt={item.caption || 'Kỷ niệm'} loading="lazy" />
-                  <span className="card-pin">✨</span>
-                </div>
-                {item.caption && <span className="card-caption">{item.caption}</span>}
+        {photos.map((item, index) => (
+          <div
+            key={index}
+            ref={(el) => (cardRefs.current[index] = el)}
+            className="galaxy-card"
+            onClick={(e) => {
+              if (dragDistRef.current < 6) {
+                e.stopPropagation();
+                setActivePhoto(item);
+              }
+            }}
+          >
+            <div className="card-frame">
+              <div className="card-img-wrap">
+                <img src={item.src} alt={item.caption || 'Kỷ niệm'} loading="lazy" />
+                <span className="card-pin">✨</span>
               </div>
+              {item.caption && <span className="card-caption">{item.caption}</span>}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
       {/* Huy hiệu hướng dẫn vuốt tay */}

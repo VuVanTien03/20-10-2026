@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { content } from '../config/content';
 
 // Danh sách các câu chúc dễ thương khi bé mèo được chạm vào
 const MESSAGES = [
@@ -44,22 +43,22 @@ export default function AnimatedCat() {
   const [floatingPetals, setFloatingPetals] = useState([]);
   const containerRef = useRef(null);
 
-  // Sinh hiệu ứng đom đóm / tim bay nhẹ từ bó hoa định kỳ
+  // Sinh hiệu ứng đom đóm / tim bay nhẹ từ bó hoa định kỳ (tối ưu tần suất cho mobile)
   useEffect(() => {
     const interval = setInterval(() => {
       const id = Date.now() + Math.random();
       const item = {
         id,
         emoji: ['🌸', '✨', '💖', '🌹'][(Math.random() * 4) | 0],
-        x: Math.random() * 50 - 25,
-        s: 14 + Math.random() * 12,
+        x: Math.random() * 40 - 20,
+        s: 14 + Math.random() * 8,
       };
-      setFloatingPetals((prev) => [...prev.slice(-6), item]);
-    }, 1200);
+      setFloatingPetals((prev) => [...prev.slice(-2), item]);
+    }, 2400);
     return () => clearInterval(interval);
   }, []);
 
-  const handleClick = (e) => {
+  const handleClick = () => {
     playCuteChime();
     setIsJumping(true);
     setMsgIdx((prev) => (prev + 1) % MESSAGES.length);

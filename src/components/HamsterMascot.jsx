@@ -40,15 +40,15 @@ export default function HamsterMascot({ size = 130, className = '', inLetter = f
   const [showQuote, setShowQuote] = useState(false);
   const [floatingHearts, setFloatingHearts] = useState([]);
 
-  // Tạo tim bay nhẹ định kỳ từ trái tim trên tay hamster
+  // Tạo tim bay nhẹ định kỳ từ trái tim trên tay hamster (tối ưu CPU mobile)
   useEffect(() => {
     const timer = setInterval(() => {
       const id = Date.now() + Math.random();
       setFloatingHearts((prev) => [
-        ...prev.slice(-4),
-        { id, x: Math.random() * 16 - 8, s: 12 + Math.random() * 8 },
+        ...prev.slice(-2),
+        { id, x: Math.random() * 14 - 7, s: 12 + Math.random() * 6 },
       ]);
-    }, 1400);
+    }, 2400);
     return () => clearInterval(timer);
   }, []);
 

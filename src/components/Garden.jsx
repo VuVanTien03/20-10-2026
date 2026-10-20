@@ -287,15 +287,16 @@ export default function Garden() {
   useEffect(() => {
     const canvas = cv.current;
     const ctx = canvas.getContext('2d');
-    // DPR tối ưu 1.5 vừa siêu nét vừa giảm 50% áp lực pixel lên GPU
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const isMobile = window.innerWidth < 768;
+    const dpr = isMobile ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
     let w, h, raf;
+    let isVisible = true;
 
     const sprites = getCachedSprites();
     stateRef.current.sprites = sprites;
 
     const resize = () => {
-      const r = wrap.current.getBoundingClientRect();
+      const r = wrap.current ? wrap.current.getBoundingClientRect() : { width: window.innerWidth, height: window.innerHeight };
       w = r.width;
       h = r.height;
       stateRef.current.w = w;
@@ -335,6 +336,10 @@ export default function Garden() {
     let lastTime = performance.now();
 
     const loop = (now) => {
+      if (!isVisible) {
+        raf = null;
+        return;
+      }
       const dt = Math.min(32, now - lastTime);
       lastTime = now;
       const time = (now - startTime) * 0.001;
@@ -372,18 +377,27 @@ export default function Garden() {
         drawTulip(ctx, t, time);
       }
 
-      // Vầng sáng lung linh quanh bông hoa đầu tiên khi chưa kích hoạt
+      // Vầng sáng lung linh quanh bông hoa đầu tiên khi chưa kích hoạt (Tối ưu radial gradient, không dùng shadowBlur)
       if (!stateRef.current.hasBloomed && tulips.length > 0) {
         const initT = tulips[0];
         const pulse = 0.8 + Math.sin(time * 3.5) * 0.25;
         const flowerHeadY = initT.y - initT.stemLength;
 
         ctx.save();
+        const aura = ctx.createRadialGradient(
+          initT.x,
+          flowerHeadY - initT.size * 0.6,
+          2,
+          initT.x,
+          flowerHeadY - initT.size * 0.6,
+          initT.size * 1.4 * pulse
+        );
+        aura.addColorStop(0, 'rgba(255, 77, 109, 0.45)');
+        aura.addColorStop(0.6, 'rgba(255, 182, 193, 0.16)');
+        aura.addColorStop(1, 'rgba(255, 182, 193, 0)');
+        ctx.fillStyle = aura;
         ctx.beginPath();
-        ctx.arc(initT.x, flowerHeadY - initT.size * 0.6, initT.size * 1.25 * pulse, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 182, 193, 0.22)';
-        ctx.shadowBlur = 35;
-        ctx.shadowColor = '#ff4d6d';
+        ctx.arc(initT.x, flowerHeadY - initT.size * 0.6, initT.size * 1.4 * pulse, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
 
@@ -400,7 +414,8 @@ export default function Garden() {
 
       // Hạt phấn hoa / đom đóm / tim bay
       const sparkles = stateRef.current.sparkles;
-      if (stateRef.current.hasBloomed && Math.random() < 0.25 && sparkles.length < 45) {
+      const maxSp = isMobile ? 18 : 40;
+      if (stateRef.current.hasBloomed && Math.random() < 0.22 && sparkles.length < maxSp) {
         sparkles.push({
           x: Math.random() * w,
           y: h - Math.random() * (h * 0.6),
@@ -443,6 +458,20 @@ export default function Garden() {
 
       raf = requestAnimationFrame(loop);
     };
+
+    // IntersectionObserver: chỉ chạy RAF khi người dùng cuộn đến vườn hoa
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && !raf) {
+          lastTime = performance.now();
+          raf = requestAnimationFrame(loop);
+        }
+      },
+      { threshold: 0.05 }
+    );
+    if (wrap.current) observer.observe(wrap.current);
+
     raf = requestAnimationFrame(loop);
 
     // KÍCH HOẠT NỞ CẢ ĐẠI DƯƠNG HOA TULIP DÀY ĐẶC VỚI 9 TẦNG LỚP ĐỘ SÂU
@@ -470,108 +499,167 @@ export default function Garden() {
           });
         }
 
-        // 9 TẦNG LỚP HOA DÀY ĐẶC TỪ CHÂN TRỜI TỚI SÁT MÉP ĐÁY (~500 - 620 ĐÓA TULIP)
-        const tiers = [
-          {
-            count: Math.round(Math.min(90, Math.max(38, w / 20))),
-            rootYMin: h * 0.38,
-            rootYMax: h * 0.46,
-            sizeMin: 14,
-            sizeMax: 20,
-            stemMin: Math.min(h * 0.14, 120),
-            stemMax: Math.min(h * 0.20, 160),
-            alpha: 0.68,
-            tierIdx: 0,
-          },
-          {
-            count: Math.round(Math.min(85, Math.max(36, w / 22))),
-            rootYMin: h * 0.46,
-            rootYMax: h * 0.53,
-            sizeMin: 18,
-            sizeMax: 24,
-            stemMin: Math.min(h * 0.16, 140),
-            stemMax: Math.min(h * 0.22, 180),
-            alpha: 0.75,
-            tierIdx: 1,
-          },
-          {
-            count: Math.round(Math.min(80, Math.max(34, w / 24))),
-            rootYMin: h * 0.53,
-            rootYMax: h * 0.60,
-            sizeMin: 22,
-            sizeMax: 29,
-            stemMin: Math.min(h * 0.18, 160),
-            stemMax: Math.min(h * 0.25, 210),
-            alpha: 0.82,
-            tierIdx: 2,
-          },
-          {
-            count: Math.round(Math.min(75, Math.max(32, w / 26))),
-            rootYMin: h * 0.60,
-            rootYMax: h * 0.67,
-            sizeMin: 27,
-            sizeMax: 36,
-            stemMin: Math.min(h * 0.20, 180),
-            stemMax: Math.min(h * 0.28, 240),
-            alpha: 0.88,
-            tierIdx: 3,
-          },
-          {
-            count: Math.round(Math.min(70, Math.max(30, w / 28))),
-            rootYMin: h * 0.67,
-            rootYMax: h * 0.74,
-            sizeMin: 33,
-            sizeMax: 44,
-            stemMin: Math.min(h * 0.22, 200),
-            stemMax: Math.min(h * 0.30, 260),
-            alpha: 0.93,
-            tierIdx: 4,
-          },
-          {
-            count: Math.round(Math.min(65, Math.max(28, w / 30))),
-            rootYMin: h * 0.74,
-            rootYMax: h * 0.81,
-            sizeMin: 40,
-            sizeMax: 52,
-            stemMin: Math.min(h * 0.24, 220),
-            stemMax: Math.min(h * 0.32, 280),
-            alpha: 0.96,
-            tierIdx: 5,
-          },
-          {
-            count: Math.round(Math.min(60, Math.max(26, w / 32))),
-            rootYMin: h * 0.81,
-            rootYMax: h * 0.88,
-            sizeMin: 47,
-            sizeMax: 60,
-            stemMin: Math.min(h * 0.24, 220),
-            stemMax: Math.min(h * 0.34, 300),
-            alpha: 0.98,
-            tierIdx: 6,
-          },
-          {
-            count: Math.round(Math.min(52, Math.max(22, w / 36))),
-            rootYMin: h * 0.88,
-            rootYMax: h * 0.94,
-            sizeMin: 54,
-            sizeMax: 70,
-            stemMin: Math.min(h * 0.23, 210),
-            stemMax: Math.min(h * 0.32, 280),
-            alpha: 1.0,
-            tierIdx: 7,
-          },
-          {
-            count: Math.round(Math.min(45, Math.max(18, w / 40))),
-            rootYMin: h * 0.94,
-            rootYMax: h + 12,
-            sizeMin: 62,
-            sizeMax: 82,
-            stemMin: Math.min(h * 0.20, 190),
-            stemMax: Math.min(h * 0.30, 270),
-            alpha: 1.0,
-            tierIdx: 8,
-          },
-        ];
+        // Phân tầng lớp hoa tối ưu: 5 tầng (~70-80 bông) trên điện thoại, 9 tầng (~500 bông) trên máy tính
+        const isMob = w < 600;
+        const tiers = isMob
+          ? [
+              {
+                count: Math.round(Math.max(14, w / 26)),
+                rootYMin: h * 0.40,
+                rootYMax: h * 0.50,
+                sizeMin: 16,
+                sizeMax: 22,
+                stemMin: Math.min(h * 0.14, 110),
+                stemMax: Math.min(h * 0.20, 150),
+                alpha: 0.72,
+                tierIdx: 0,
+              },
+              {
+                count: Math.round(Math.max(16, w / 24)),
+                rootYMin: h * 0.50,
+                rootYMax: h * 0.62,
+                sizeMin: 22,
+                sizeMax: 30,
+                stemMin: Math.min(h * 0.16, 130),
+                stemMax: Math.min(h * 0.24, 180),
+                alpha: 0.82,
+                tierIdx: 1,
+              },
+              {
+                count: Math.round(Math.max(16, w / 24)),
+                rootYMin: h * 0.62,
+                rootYMax: h * 0.74,
+                sizeMin: 28,
+                sizeMax: 38,
+                stemMin: Math.min(h * 0.20, 160),
+                stemMax: Math.min(h * 0.28, 220),
+                alpha: 0.90,
+                tierIdx: 2,
+              },
+              {
+                count: Math.round(Math.max(14, w / 26)),
+                rootYMin: h * 0.74,
+                rootYMax: h * 0.86,
+                sizeMin: 36,
+                sizeMax: 48,
+                stemMin: Math.min(h * 0.22, 180),
+                stemMax: Math.min(h * 0.30, 240),
+                alpha: 0.96,
+                tierIdx: 3,
+              },
+              {
+                count: Math.round(Math.max(12, w / 30)),
+                rootYMin: h * 0.86,
+                rootYMax: h + 10,
+                sizeMin: 46,
+                sizeMax: 62,
+                stemMin: Math.min(h * 0.22, 180),
+                stemMax: Math.min(h * 0.28, 250),
+                alpha: 1.0,
+                tierIdx: 4,
+              },
+            ]
+          : [
+              {
+                count: Math.round(Math.min(90, Math.max(38, w / 20))),
+                rootYMin: h * 0.38,
+                rootYMax: h * 0.46,
+                sizeMin: 14,
+                sizeMax: 20,
+                stemMin: Math.min(h * 0.14, 120),
+                stemMax: Math.min(h * 0.20, 160),
+                alpha: 0.68,
+                tierIdx: 0,
+              },
+              {
+                count: Math.round(Math.min(85, Math.max(36, w / 22))),
+                rootYMin: h * 0.46,
+                rootYMax: h * 0.53,
+                sizeMin: 18,
+                sizeMax: 24,
+                stemMin: Math.min(h * 0.16, 140),
+                stemMax: Math.min(h * 0.22, 180),
+                alpha: 0.75,
+                tierIdx: 1,
+              },
+              {
+                count: Math.round(Math.min(80, Math.max(34, w / 24))),
+                rootYMin: h * 0.53,
+                rootYMax: h * 0.60,
+                sizeMin: 22,
+                sizeMax: 29,
+                stemMin: Math.min(h * 0.18, 160),
+                stemMax: Math.min(h * 0.25, 210),
+                alpha: 0.82,
+                tierIdx: 2,
+              },
+              {
+                count: Math.round(Math.min(75, Math.max(32, w / 26))),
+                rootYMin: h * 0.60,
+                rootYMax: h * 0.67,
+                sizeMin: 27,
+                sizeMax: 36,
+                stemMin: Math.min(h * 0.20, 180),
+                stemMax: Math.min(h * 0.28, 240),
+                alpha: 0.88,
+                tierIdx: 3,
+              },
+              {
+                count: Math.round(Math.min(70, Math.max(30, w / 28))),
+                rootYMin: h * 0.67,
+                rootYMax: h * 0.74,
+                sizeMin: 33,
+                sizeMax: 44,
+                stemMin: Math.min(h * 0.22, 200),
+                stemMax: Math.min(h * 0.30, 260),
+                alpha: 0.93,
+                tierIdx: 4,
+              },
+              {
+                count: Math.round(Math.min(65, Math.max(28, w / 30))),
+                rootYMin: h * 0.74,
+                rootYMax: h * 0.81,
+                sizeMin: 40,
+                sizeMax: 52,
+                stemMin: Math.min(h * 0.24, 220),
+                stemMax: Math.min(h * 0.32, 280),
+                alpha: 0.96,
+                tierIdx: 5,
+              },
+              {
+                count: Math.round(Math.min(60, Math.max(26, w / 32))),
+                rootYMin: h * 0.81,
+                rootYMax: h * 0.88,
+                sizeMin: 47,
+                sizeMax: 60,
+                stemMin: Math.min(h * 0.24, 220),
+                stemMax: Math.min(h * 0.34, 300),
+                alpha: 0.98,
+                tierIdx: 6,
+              },
+              {
+                count: Math.round(Math.min(52, Math.max(22, w / 36))),
+                rootYMin: h * 0.88,
+                rootYMax: h * 0.94,
+                sizeMin: 54,
+                sizeMax: 70,
+                stemMin: Math.min(h * 0.23, 210),
+                stemMax: Math.min(h * 0.32, 280),
+                alpha: 1.0,
+                tierIdx: 7,
+              },
+              {
+                count: Math.round(Math.min(45, Math.max(18, w / 40))),
+                rootYMin: h * 0.94,
+                rootYMax: h + 12,
+                sizeMin: 62,
+                sizeMax: 82,
+                stemMin: Math.min(h * 0.20, 190),
+                stemMax: Math.min(h * 0.30, 270),
+                alpha: 1.0,
+                tierIdx: 8,
+              },
+            ];
 
         const allTulips = [];
 
@@ -669,6 +757,7 @@ export default function Garden() {
 
     return () => {
       cancelAnimationFrame(raf);
+      observer.disconnect();
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('pointerdown', handlePointerDown);
     };
