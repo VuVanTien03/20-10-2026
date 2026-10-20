@@ -1,0 +1,8 @@
+services:
+  web:
+    build: .
+    image: web-20-10:latest
+    container_name: web-20-10
+    restart: unless-stopped
+    ports:
+      - "8080:80"
